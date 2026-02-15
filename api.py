@@ -13,6 +13,8 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from langgraph.graph import StateGraph, END
 from google import genai
 from google.genai import types
+from pinecone import Pinecone
+from sentence_transformers import SentenceTransformer
 from pydantic import BaseModel, Field
 import json
 import dotenv
@@ -43,7 +45,7 @@ dotenv.load_dotenv(dotenv_path=env_file, override=True)
 
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.environ.get("SERVICE_ACCOUNT_JSON_FILE")
-
+PINECONE_KEY = os.environ.get("PINECONEAPI")
 
 client = genai.Client(
       vertexai=True,
@@ -51,12 +53,15 @@ client = genai.Client(
       #api_key=os.environ.get("GOOGLE_CLOUD_API_KEY"),
       location="us-central1",
   )
-client_db = chromadb.PersistentClient()
+"""client_db = chromadb.PersistentClient()
 ef = embedding_functions.SentenceTransformerEmbeddingFunction()
 collection = client_db.get_or_create_collection(
     name="cert",
     embedding_function=ef
-)
+)"""
+embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+pc = Pinecone(api_key=PINECONE_KEY)
+index = pc.Index("certificates")
 # Initialize Models
 chat_model = "gemini-2.5-flash"
 app = FastAPI()
@@ -168,19 +173,23 @@ def evaluation_node(state: AgentState):
         data = json.loads(clean_json)
         
         if data['is_valid_format']:
-            text_representation = f"{data['candidate_name']} got {data['title_name']} from {data['issuer']}."
+            text_to_embed = f"{data['candidate_name']} got {data['title_name']} from {data['issuer']}."
+            vector = embed_model.encode(text_to_embed).tolist()
             
-            collection.add(
-                documents=[text_representation],
-                metadatas=[{
+            # 2. Upload to Pinecone
+            # Pinecone expects: (ID, Vector, Metadata)
+            unique_id = f"{data['candidate_name']}_{data['credential_id']}".replace(" ", "_")
+            
+            index.upsert(vectors=[{
+                "id": unique_id,
+                "values": vector,
+                "metadata": {
                     "name": data['candidate_name'],
                     "issuer": data['issuer'],
                     "date": data['issue_date'],
-                    "id": data['credential_id'] or "N/A"
-                }],
-                ids=[f"{data['candidate_name']}_{data['credential_id']}"] # Unique ID
-            )
-
+                    "review": data['review']
+                }
+            }])
             formatted_msg = (
                 f"**--Certificate Analyzed**\n"
                 f"**--Name:** {data.get('candidate_name')}\n"
@@ -250,44 +259,50 @@ async def admin_dashboard(request: Request, username: str = Depends(get_current_
 
 @app.get("/api/admin/certs")
 async def get_certificates(query: Optional[str] = None, username: str = Depends(get_current_admin)):
-    """Fetches all certificates, or performs a vector search if a query is provided."""
+    """Fetches certificates from Pinecone. Uses a dummy vector to 'browse' if no query exists."""
     try:
+        # 1. Prepare the Vector
         if query:
-            # Perform Semantic Vector Search
-            results = collection.query(
-                query_texts=[query],
-                n_results=10 # Return top 10 matches
-            )
-            # Format ChromaDB's output
-            items = []
-            if results['ids'] and len(results['ids'][0]) > 0:
-                for i in range(len(results['ids'][0])):
-                    items.append({
-                        "id": results['ids'][0][i],
-                        "document": results['documents'][0][i],
-                        "metadata": results['metadatas'][0][i]
-                    })
-            return {"status": "success", "data": items}
+            # Convert user text -> [0.1, -0.2, ...]
+            search_vector = embed_model.encode(query).tolist()
         else:
-            # Fetch EVERYTHING (No search)
-            results = collection.get()
-            items = []
-            if results['ids']:
-                for i in range(len(results['ids'])):
-                    items.append({
-                        "id": results['ids'][i],
-                        "document": results['documents'][i],
-                        "metadata": results['metadatas'][i]
-                    })
-            return {"status": "success", "data": items}
+            # Trick: Create a "Dummy Vector" of zeros to browse the DB
+            # 384 is the dimension size for 'all-MiniLM-L6-v2'
+            search_vector = [0.0] * 384 
+
+        # 2. Query Pinecone
+        results = index.query(
+            vector=search_vector,
+            top_k=100, # Adjust this number based on how many you want to show
+            include_metadata=True
+        )
+
+        # 3. Format Pinecone's output for your Frontend
+        items = []
+        for match in results['matches']:
+            # Pinecone stores the review/text inside 'metadata', not a separate 'document' field
+            # We assume your metadata has 'review' or we combine fields to make a summary
+            metadata = match['metadata']
+            
+            items.append({
+                "id": match['id'],
+                # Create a readable summary from metadata
+                "document": f"{metadata.get('name', 'Unknown')} - {metadata.get('issuer', 'Unknown')}", 
+                "metadata": metadata,
+                "score": match['score']
+            })
+            
+        return {"status": "success", "data": items}
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.delete("/api/admin/certs/{cert_id}")
 async def delete_certificate(cert_id: str, username: str = Depends(get_current_admin)):
-    """Deletes a specific certificate by its ID."""
+    """Deletes a specific certificate by its ID in Pinecone."""
     try:
-        collection.delete(ids=[cert_id])
+        # Pinecone delete is simple
+        index.delete(ids=[cert_id])
         return {"status": "success", "message": f"Deleted {cert_id}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
