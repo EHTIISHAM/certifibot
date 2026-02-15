@@ -10,6 +10,7 @@ cam-reconciliation-software-2d6091c89e5a.json
 # Distribution / packaging
 .Python
 build/
+chroma/*
 develop-eggs/
 dist/
 downloads/

@@ -1,0 +1,7 @@
+chromadb
+fastapi
+uvicorn
+sentence-transformers
+python-multipart
+google-genai
+langgraph

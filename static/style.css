@@ -1,120 +1,185 @@
-body {
-    font-family: 'Segoe UI', sans-serif;
-    background-color: #f4f7f6;
+/* --- RESET & GLOBAL --- */
+:root {
+    --sidebar-bg: #f9f9f9;
+    --main-bg: #ffffff;
+    --border-color: #e5e5e5;
+    --input-bg: #f3f3f3;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+html, body {
+    height: 100%; /* Critical for full height */
+    width: 100%;
+    overflow: hidden; /* Prevent body scroll, handle it in sub-containers */
+}
+
+/* --- THE LAYOUT CONTAINER (20/80 Split) --- */
+.app-container {
+    display: flex;        /* This aligns Sidebar and Main side-by-side */
+    width: 100vw;
+    height: 100vh;        /* Forces full screen height */
+}
+
+/* --- 1. SIDEBAR (20%) --- */
+.sidebar {
+    width: 20%;           /* Exactly 20% width */
+    min-width: 250px;     /* Don't let it get too small */
+    height: 100%;         /* Full height */
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+/* Sidebar Elements */
+.brand { font-weight: 600; font-size: 18px; display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+.new-chat-btn {
+    width: 100%; padding: 12px; border-radius: 30px; border: 1px solid var(--border-color);
+    background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 14px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+.new-chat-btn:hover { background: #f0f0f0; }
+
+.nav-links { flex: 1; } /* Pushes footer down */
+.nav-links a {
+    display: flex; align-items: center; gap: 10px; padding: 10px;
+    text-decoration: none; color: #555; border-radius: 8px; margin-bottom: 5px; font-size: 14px;
+}
+.nav-links a:hover, .nav-links a.active { background: #e5e5e5; color: black; }
+
+.sidebar-footer { margin-top: auto; }
+.user-profile { display: flex; align-items: center; gap: 10px; font-size: 14px; padding-top: 15px; border-top: 1px solid #eee; }
+.avatar { width: 32px; height: 32px; background: #ddd; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+
+/* --- 2. MAIN CONTENT (80%) --- */
+.main-content {
+    flex: 1;              /* Takes remaining space (approx 80%) */
+    height: 100%;         /* Full height */
+    display: flex;
+    flex-direction: column;
+    background: var(--main-bg);
+    position: relative;
+}
+
+/* A. Chat History Area (Scrollable) */
+.chat-history {
+    flex: 1;              /* Takes all available vertical space */
+    overflow-y: auto;     /* Enables scrolling ONLY here */
+    padding: 40px 10%;    /* Centered content padding */
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 120px; /* Space for input bar */
+}
+
+/* B. Welcome Screen (Centered) */
+.welcome-container {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 50px;
+    justify-content: center;
+    text-align: center;
+    padding-bottom: 100px;
 }
+h1 { font-size: 32px; margin-bottom: 10px; }
+.subtitle { color: #888; margin-bottom: 40px; }
 
-h1 {
-    color: #333;
-    margin-bottom: 20px;
+/* Suggestion Cards */
+.suggestion-grid { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
+.card {
+    border: 1px solid var(--border-color); border-radius: 12px; padding: 15px;
+    width: 200px; text-align: left; cursor: pointer; transition: 0.2s;
 }
+.card:hover { background: #f9f9f9; transform: translateY(-2px); }
 
-#chatbox {
-    width: 500px;
-    height: 400px;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    overflow-y: scroll;
+/* C. Input Section (Fixed Bottom) */
+.input-section {
+    width: 100%;
     padding: 20px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-.botText {
-    text-align: left;
-    margin: 10px 0;
-}
-
-.botText span {
-    background-color: #e4e6eb;
-    color: black;
-    padding: 10px 15px;
-    border-radius: 15px;
-    display: inline-block;
-    max-width: 80%;
-}
-
-.userText {
-    text-align: right;
-    margin: 10px 0;
-}
-
-.userText span {
-    background-color: #0084ff;
-    color: white;
-    padding: 10px 15px;
-    border-radius: 15px;
-    display: inline-block;
-    max-width: 80%;
-}
-
-#userInput {
-    width: 500px;
-    margin-top: 20px;
+    background: linear-gradient(to top, white 80%, rgba(255,255,255,0));
     display: flex;
-    gap: 10px;
+    flex-direction: column;
     align-items: center;
+    position: absolute;   /* Stick to bottom overlay */
+    bottom: 0;
 }
 
-#textInput {
-    flex-grow: 1;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    outline: none;
+.input-wrapper {
+    width: 100%;
+    max-width: 700px;
+    background: var(--input-bg);
+    border-radius: 30px; /* Rounded pill shape */
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-/* File Upload Styling */
-.file-upload-wrapper {
-    position: relative;
-    overflow: hidden;
-    display: inline-block;
+#msg-input {
+    flex: 1; background: transparent; border: none; font-size: 16px; outline: none; padding: 10px 0;
+}
+.attach-btn, .send-btn {
+    background: none; border: none; cursor: pointer; color: #666; display: flex; align-items: center;
+}
+.attach-btn:hover, .send-btn:hover { color: black; }
+
+/* Messages */
+.message { display: flex; gap: 15px; line-height: 1.5; max-width: 80%; }
+.message.user { align-self: flex-end; flex-direction: row-reverse; }
+.message.user .msg-content { background: #f3f3f3; }
+.msg-content { background: transparent; padding: 10px 15px; border-radius: 12px; }
+
+.file-preview {
+    display: none; 
+    align-items: center;
+    gap: 10px;
+    background: #e8f0fe;
+    color: #1967d2;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    width: fit-content;
+    margin-bottom: 10px;
 }
 
-#fileInput {
-    font-size: 100px;
-    position: absolute;
-    left: 0;
-    top: 0;
-    opacity: 0;
-    cursor: pointer;
+/* Visible only when this class is added */
+.file-preview.show {
+    display: flex; 
 }
 
-.file-label {
-    background: #6c757d;
-    color: white;
-    padding: 10px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-    white-space: nowrap;
-}
-
-#fileName {
-    font-size: 11px;
-    color: #666;
-    margin-left: 5px;
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-#buttonInput {
-    padding: 12px 20px;
-    background-color: #0084ff;
-    color: white;
+/* The X Button styling */
+.file-preview button {
+    background: none;
     border: none;
-    border-radius: 5px;
+    color: #1967d2;
     cursor: pointer;
     font-weight: bold;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 5px;
+}
+.file-preview button:hover {
+    color: #d93025; /* Red on hover */
 }
 
-#buttonInput:hover {
-    background-color: #006bcf;
+.disclaimer {
+    font-size: 11px;          /* Very small text */
+    color: #b3b3b3;           /* Light grey to blend with white background */
+    text-align: center;       /* Centered below input */
+    margin-top: 12px;         /* Spacing from the input box */
+    opacity: 0.6;             /* Transparency makes it look "faded" */
+    pointer-events: none;     /* Optional: makes it unclickable/passive */
+}
+
+/* Responsive Mobile Override */
+@media (max-width: 768px) {
+    .app-container { flex-direction: column; }
+    .sidebar { display: none; } /* Hide sidebar on mobile for now */
+    .main-content { width: 100%; }
+    .chat-history { padding: 20px; }
 }

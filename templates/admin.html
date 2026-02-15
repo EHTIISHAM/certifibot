@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure DB Admin</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background: #0084ff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button.delete-btn { background: #dc3545; padding: 5px 10px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🛡️ Vector DB Dashboard</h2>
+            <span>Welcome, <b>{{ username }}</b></span>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Semantic Search (e.g., 'Find Python certificates from 2024')">
+            <button onclick="loadData()">Search DB</button>
+            <button onclick="document.getElementById('searchInput').value=''; loadData();" style="background:#6c757d;">Clear</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>DB ID</th>
+                    <th>Candidate Name</th>
+                    <th>Issuer</th>
+                    <th>Date</th>
+                    <th>AI Summary (Vector Text)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Load data on page load
+        document.addEventListener("DOMContentLoaded", loadData);
+
+        async function loadData() {
+            const query = document.getElementById('searchInput').value;
+            const url = query ? `/api/admin/certs?query=${encodeURIComponent(query)}` : `/api/admin/certs`;
+            
+            const response = await fetch(url);
+            const result = await response.json();
+            
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = ''; // Clear current
+
+            if (result.status === 'success' && result.data.length > 0) {
+                result.data.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><small>${item.id}</small></td>
+                        <td><b>${item.metadata.name}</b></td>
+                        <td>${item.metadata.issuer}</td>
+                        <td>${item.metadata.date}</td>
+                        <td><small>${item.document}</small></td>
+                        <td><button class="delete-btn" onclick="deleteCert('${item.id}')">Delete</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
+            }
+        }
+
+        async function deleteCert(certId) {
+            if(confirm(`Are you sure you want to delete ${certId}?`)) {
+                const response = await fetch(`/api/admin/certs/${certId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if(result.status === 'success') {
+                    loadData(); // Reload table
+                } else {
+                    alert("Error deleting record.");
+                }
+            }
+        }
+    </script>
+</body>
+</html>

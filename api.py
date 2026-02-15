@@ -1,10 +1,15 @@
 import os
 import uvicorn
+import chromadb
+from chromadb.utils import embedding_functions
 from typing import Annotated, TypedDict, List, Optional
 from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import secrets
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from langgraph.graph import StateGraph, END
 from google import genai
 from google.genai import types
@@ -46,7 +51,12 @@ client = genai.Client(
       #api_key=os.environ.get("GOOGLE_CLOUD_API_KEY"),
       location="us-central1",
   )
-
+client_db = chromadb.PersistentClient()
+ef = embedding_functions.SentenceTransformerEmbeddingFunction()
+collection = client_db.get_or_create_collection(
+    name="cert",
+    embedding_function=ef
+)
 # Initialize Models
 chat_model = "gemini-2.5-flash"
 app = FastAPI()
@@ -158,6 +168,19 @@ def evaluation_node(state: AgentState):
         data = json.loads(clean_json)
         
         if data['is_valid_format']:
+            text_representation = f"{data['candidate_name']} got {data['title_name']} from {data['issuer']}."
+            
+            collection.add(
+                documents=[text_representation],
+                metadatas=[{
+                    "name": data['candidate_name'],
+                    "issuer": data['issuer'],
+                    "date": data['issue_date'],
+                    "id": data['credential_id'] or "N/A"
+                }],
+                ids=[f"{data['candidate_name']}_{data['credential_id']}"] # Unique ID
+            )
+
             formatted_msg = (
                 f"**--Certificate Analyzed**\n"
                 f"**--Name:** {data.get('candidate_name')}\n"
@@ -203,6 +226,71 @@ workflow.add_edge("evaluate", END)
 # Compile the brain
 agent_app = workflow.compile()
 
+
+security = HTTPBasic()
+
+# --- SECURITY LOGIC ---
+def get_current_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    # In production, use environment variables: os.environ.get("ADMIN_USER")
+    correct_username = secrets.compare_digest(credentials.username, "admin")
+    correct_password = secrets.compare_digest(credentials.password, "supersecret123")
+    
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, username: str = Depends(get_current_admin)):
+    """Serves the secure HTML dashboard"""
+    return templates.TemplateResponse("admin.html", {"request": request, "username": username})
+
+@app.get("/api/admin/certs")
+async def get_certificates(query: Optional[str] = None, username: str = Depends(get_current_admin)):
+    """Fetches all certificates, or performs a vector search if a query is provided."""
+    try:
+        if query:
+            # Perform Semantic Vector Search
+            results = collection.query(
+                query_texts=[query],
+                n_results=10 # Return top 10 matches
+            )
+            # Format ChromaDB's output
+            items = []
+            if results['ids'] and len(results['ids'][0]) > 0:
+                for i in range(len(results['ids'][0])):
+                    items.append({
+                        "id": results['ids'][0][i],
+                        "document": results['documents'][0][i],
+                        "metadata": results['metadatas'][0][i]
+                    })
+            return {"status": "success", "data": items}
+        else:
+            # Fetch EVERYTHING (No search)
+            results = collection.get()
+            items = []
+            if results['ids']:
+                for i in range(len(results['ids'])):
+                    items.append({
+                        "id": results['ids'][i],
+                        "document": results['documents'][i],
+                        "metadata": results['metadatas'][i]
+                    })
+            return {"status": "success", "data": items}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.delete("/api/admin/certs/{cert_id}")
+async def delete_certificate(cert_id: str, username: str = Depends(get_current_admin)):
+    """Deletes a specific certificate by its ID."""
+    try:
+        collection.delete(ids=[cert_id])
+        return {"status": "success", "message": f"Deleted {cert_id}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/chat")
 async def chat_endpoint(
