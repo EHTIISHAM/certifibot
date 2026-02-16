@@ -59,7 +59,7 @@ collection = client_db.get_or_create_collection(
     name="cert",
     embedding_function=ef
 )"""
-embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+embed_model = SentenceTransformer('all-MiniLM-L6-v2',token=1024)
 pc = Pinecone(api_key=PINECONE_KEY)
 index = pc.Index("certificates")
 # Initialize Models
@@ -336,4 +336,4 @@ async def read_root(request: Request):
     """Renders the HTML template"""
     return templates.TemplateResponse("index.html", {"request": request})
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
