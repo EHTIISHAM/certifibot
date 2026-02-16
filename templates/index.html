@@ -169,7 +169,7 @@
         const id = 'loader-' + Date.now();
         const div = document.createElement('div');
         div.className = 'message bot';
-        div.innerHTML = `<div class="bot-icon">✳️</div><div class="msg-content" id="${id}"><span class="thinking">Thinking...</span></div>`;
+        div.innerHTML = `<div class="bot-icon"></div><div class="msg-content" id="${id}"><span class="thinking">Thinking...</span></div>`;
         chatHistory.appendChild(div);
         chatHistory.scrollTop = chatHistory.scrollHeight;
         return id;
