@@ -69,8 +69,14 @@ print(f"DEBUG: Loading .env from: {env_file}")
 # Override=True ensures that if you change the .env file, it updates immediately
 dotenv.load_dotenv(dotenv_path=env_file, override=True)
 
-
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.environ.get("SERVICE_ACCOUNT_JSON_FILE")
+if os.environ.get("SERVICE_ACCOUNT_JSON_FILE").endswith(".json"):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.environ.get("SERVICE_ACCOUNT_JSON_FILE")
+else:
+    # create a json file from the str data in SERVICE_ACCOUNT_JSON_FILE
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+        tmp.write(os.environ.get("SERVICE_ACCOUNT_JSON_FILE").encode())
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+        
 PINECONE_KEY = os.environ.get("PINECONEAPI")
 
 client = genai.Client(
