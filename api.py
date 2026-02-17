@@ -1,7 +1,7 @@
 import os
 import uvicorn
-import chromadb
-from chromadb.utils import embedding_functions
+import tempfile
+import base64
 from typing import Annotated, TypedDict, List, Optional
 from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.responses import HTMLResponse
@@ -14,7 +14,6 @@ from langgraph.graph import StateGraph, END
 from google import genai
 from google.genai import types
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
 from pydantic import BaseModel, Field
 import json
 import dotenv
@@ -35,6 +34,33 @@ def get_env_path():
         base_path = Path(__file__).resolve().parent.parent
     
     return base_path / '.env'
+def get_secret_file_path():
+    """
+    Decodes the Base64 environment variable and saves it to a temp file.
+    Returns the path to that file.
+    """
+    # 1. Get the encoded string
+    encoded_str = os.environ.get("MY_SECRET_FILE_BASE64")
+    
+    if not encoded_str:
+        print("⚠️ Warning: Secret env var not found")
+        return None
+
+    # 2. Decode it back to bytes
+    file_content = base64.b64decode(encoded_str)
+
+    # 3. Create a temporary file (Vercel allows writing to /tmp)
+    # delete=False ensures the file stays there while we read it
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as temp_file:
+        temp_file.write(file_content)
+        temp_file.flush() # Make sure data is written
+        return temp_file.name
+
+# --- USAGE EXAMPLE ---
+secret_path = get_secret_file_path()
+
+if secret_path:
+    print(f"Secret restored at: {secret_path}")
 
 # Load the env
 env_file = "D:\certifibot\.env"
@@ -59,7 +85,6 @@ collection = client_db.get_or_create_collection(
     name="cert",
     embedding_function=ef
 )"""
-embed_model = SentenceTransformer('all-MiniLM-L6-v2',token=1024)
 pc = Pinecone(api_key=PINECONE_KEY)
 index = pc.Index("certificates")
 # Initialize Models
@@ -174,8 +199,12 @@ def evaluation_node(state: AgentState):
         
         if data['is_valid_format']:
             text_to_embed = f"{data['candidate_name']} got {data['title_name']} from {data['issuer']}."
-            vector = embed_model.encode(text_to_embed).tolist()
-            
+            res = client.models.embed_content(    model="gemini-embedding-001",
+                                                        contents=text_to_embed,
+                                                                config={
+          'output_dimensionality': 384
+      },  )
+            vector = res.embeddings[0].values
             # 2. Upload to Pinecone
             # Pinecone expects: (ID, Vector, Metadata)
             unique_id = f"{data['candidate_name']}_{data['credential_id']}".replace(" ", "_")
@@ -264,7 +293,12 @@ async def get_certificates(query: Optional[str] = None, username: str = Depends(
         # 1. Prepare the Vector
         if query:
             # Convert user text -> [0.1, -0.2, ...]
-            search_vector = embed_model.encode(query).tolist()
+            res = client.models.embed_content(    model="gemini-embedding-001",
+                                                        contents=query,
+                                                                config={
+          'output_dimensionality': 384
+            },  )
+            search_vector = res.embeddings[0].values
         else:
             # Trick: Create a "Dummy Vector" of zeros to browse the DB
             # 384 is the dimension size for 'all-MiniLM-L6-v2'
